@@ -1,0 +1,301 @@
+'''
+Tool for annotate videos
+Author: Zhaonan Li zli@brandeis.edu
+Created at: 4/13/2019
+'''
+import numpy as np
+import os
+import sys
+from PyQt5.QtCore import Qt, QPoint
+from PyQt5.QtWidgets import QWidget, QApplication, QLabel, QMainWindow, QAction, QInputDialog, QFileDialog
+from PyQt5.QtGui import QPainter, QPixmap, QImage
+import cv2
+import scipy.io
+from functools import partial
+
+class FrameBox(QMainWindow):
+
+    def __init__(self):
+        self.frame_qpixmap = QPixmap()
+        super().__init__()
+        self.initParameters()
+        self.initUI()
+        self.initMenu()
+        self.initAnnotation()
+        self.init_frames()
+        self.setFrame(self.frame_num)
+
+    def initParameters(self):
+        self.types_of_annotations = ["pts_pos","pts_neg", "pts_pos_o", "pts_nuc"]
+        self.x = 0
+        self.y = 0
+        self.mode = 0  # 1 is update, 2 is append, 0 doesn't change the existing annotations
+        self.cur_annotation = np.empty((0,2), int)
+        self.cur_annotation_type = ""
+        self.path_to_video = 'Videos/d400um.avi'
+        self.path_to_annot = '18000_4c.mat'
+        self.frame_num = 0
+        self.video_reader = cv2.VideoCapture(self.path_to_video)
+
+    # initialize parameters including frame_width, frame_height, total_frames
+    def initUI(self):
+        assert(os.path.isfile(self.path_to_video))
+
+        # get video properties
+        frame_width = int(self.video_reader.get(cv2.CAP_PROP_FRAME_WIDTH))
+        frame_height = int(self.video_reader.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total_frames = int(self.video_reader.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.frame_width = frame_width
+        self.frame_height = frame_height
+        self.total_frames = total_frames
+        self.resize_ratio = 1
+
+        # resize if the input video is too big
+        if frame_width > 500 or frame_height > 500:
+            self.resize_ratio = 0.8
+            self.frame_width = int(frame_width * self.resize_ratio)
+            self.frame_height = int(frame_height * self.resize_ratio)
+
+        # set size of the widget to the size of frames
+        self.setGeometry(100, 100, self.frame_width, self.frame_height)
+
+        # self.info_bar = QLabel()
+        self.frame_display = QLabel(self)
+        self.frame_display.resize(self.frame_width, self.frame_height)
+
+        self.frame_display.setMouseTracking(True)
+        self.setMouseTracking(True)
+
+        self.show()
+        self.statusBar().showMessage('initUI... done')
+
+    def init_frames(self):
+        video_name = self.path_to_video.split('Videos/')[1]
+        path_to_frame_folder = 'Frames/' + video_name
+
+        print(path_to_frame_folder)
+
+        # generate frame folder if it does not exist
+        if not os.path.isdir(path_to_frame_folder):
+            # create frame folder
+            os.mkdir(path_to_frame_folder)
+            # extract frames from video and store them in the folder we just created
+            success, frame = self.video_reader.read()
+
+            frame_counter = 0
+            while success:
+                image_file_name = path_to_frame_folder + '/%05d.jpg' % frame_counter
+                self.statusBar.showMessage(image_file_name)
+                cv2.imwrite(image_file_name, frame)
+                success, frame = self.video_reader.read()
+                frame_counter += 1
+            self.max_frame_num = frame_counter - 1
+            self.statusBar.showMessage("Frames stored at {}".format(path_to_frame_folder))
+
+        # get total number of frames
+        file_names = [int(x.split('.jpg')[0]) for x in os.listdir(path_to_frame_folder) if '.jpg' in x]
+        self.max_frame_num = max(file_names)
+
+    # read k, points of neg, nuc, pos, and pos_o
+    def initAnnotation(self):
+        file_dialog = QFileDialog()
+        file_dialog.setDefaultSuffix('mat')
+        file_name = file_dialog.getOpenFileName(self, 'Select Annotation File')
+        if file_name[0]:
+            mat = scipy.io.loadmat(file_name[0])
+            self.k = mat['k'][0]
+            self.pts_neg = mat['pts_neg'][0]
+            self.pts_nuc = mat['pts_nuc'][0]
+            self.pts_pos = mat['pts_pos'][0]
+            self.pts_pos_o = mat['pts_pos_o'][0]
+            self.statusBar().showMessage('initAnnotation... done')
+
+    # init menu bar
+    def initMenu(self):
+        menubar = self.menuBar()
+        append = menubar.addMenu("Append")
+        update = menubar.addMenu("Update")
+
+        # add actions to append and update
+        for i in range(len(self.types_of_annotations)):
+            annotation = self.types_of_annotations[i]
+            new_action_append = QAction(annotation, self)
+            new_action_append.setShortcut("Ctrl+" + str(i + 1))
+            new_action_update = QAction(annotation, self)
+            new_action_update.setShortcut("Shift+" + str(i + 1))
+            # pass argument using partial
+            new_action_append.triggered.connect(partial(self.appendAnnotations, i))
+            new_action_update.triggered.connect(partial(self.updateAnnotations, i))
+
+            append.addAction(new_action_append)
+            update.addAction(new_action_update)
+
+        change_frame_num = menubar.addMenu("Change Frame")
+        change_frame_num_action = QAction("Set Frame Number", self)
+        change_frame_num_action.setShortcut("Ctrl+f")
+        change_frame_num_action.triggered.connect(self.change_frame_number)
+        change_frame_num.addAction(change_frame_num_action)
+
+        save_annotation = menubar.addMenu("Save")
+        save_annotation_action = QAction("Select Directory", self)
+        save_annotation_action.setShortcut("Ctrl+s")
+        save_annotation_action.triggered.connect(self.saveAllAnnotationsToFile)
+        save_annotation.addAction(save_annotation_action)
+
+    def updateAnnotations(self, index):
+        cur = self.types_of_annotations[index]
+        self.statusBar().showMessage("Update mode selected: {}".format(cur))
+        self.mode = 1
+        self.cleanUpCurrentAnnotation()
+        self.cur_annotation_type = cur
+
+    def appendAnnotations(self, index):
+        cur = self.types_of_annotations[index]
+        self.statusBar().showMessage("Append mode selected: {}".format(cur))
+        self.mode = 2
+        self.cleanUpCurrentAnnotation()
+        self.cur_annotation_type = cur
+
+    def setFrame(self, frame_num):
+        assert(frame_num >= 0)
+        self.statusBar().showMessage("set frame number to {}".format(frame_num))
+
+        self.frame_num = frame_num # update current frame number
+
+        frame_file_name = 'Frames/' + self.path_to_video.split('Videos/')[1] + '/%05d' % frame_num
+        q_image = QImage(frame_file_name).scaledToHeight(self.frame_height).scaledToWidth(self.frame_width)
+
+        self.frame_qpixmap = QPixmap.fromImage(q_image)
+
+        pts_pos = self.pts_pos[frame_num][0]
+        pts_neg = self.pts_neg[frame_num][0]
+        pts_pos_o = self.pts_pos_o[frame_num][0]
+        pts_nuc = self.pts_nuc[frame_num][0]
+
+        if pts_pos.size > 0:
+            self.drawpoints(pts_pos, Qt.blue)
+        if pts_neg.size > 0:
+            self.drawpoints(pts_neg, Qt.red)
+        if pts_pos_o.size > 0:
+            self.drawpoints(pts_pos_o, Qt.green)
+        if pts_nuc.size > 0:
+            self.drawpoints(pts_nuc, Qt.yellow)
+
+        if not self.mode == 0:
+            self.drawCurrentAnnotation()
+
+    def addToCurrentAnnotation(self, x, y):
+        if not self.mode == 0:
+            self.cur_annotation = np.vstack((self.cur_annotation, [x, y]))
+            self.setFrame(self.frame_num)
+
+    def saveCurrentAnnotation(self):
+        # update mode
+        if self.mode == 1:
+            if self.cur_annotation_type == 'pts_neg':
+                self.pts_neg[self.frame_num][0] = self.cur_annotation
+            elif self.cur_annotation_type == 'pts_pos':
+                self.pts_pos[self.frame_num][0] = self.cur_annotation
+            elif self.cur_annotation_type == 'pts_pos_o':
+                self.pts_pos_o[self.frame_num][0] == self.cur_annotation
+            elif self.cur_annotation_type == 'pts_nuc':
+                self.pts_nuc[self.frame_num][0] == self.cur_annotation
+            self.statusBar().showMessage("annotations updated")
+        # append mode
+        elif self.mode == 2:
+            if self.cur_annotation_type == 'pts_neg':
+                self.pts_neg[self.frame_num][0] = np.vstack((self.pts_neg[self.frame_num][0], self.cur_annotation))
+            elif self.cur_annotation_type == 'pts_pos':
+                self.pts_pos[self.frame_num][0] = np.vstack((self.pts_pos[self.frame_num][0], self.cur_annotation))
+            elif self.cur_annotation_type == 'pts_pos_o':
+                self.pts_pos_o[self.frame_num][0] = np.vstack((self.pts_pos_o[self.frame_num][0], self.cur_annotation))
+            elif self.cur_annotation_type == 'pts_nuc':
+                self.pts_nuc[self.frame_num][0] = np.vstack((self.pts_nuc[self.frame_num][0], self.cur_annotation))
+            self.statusBar().showMessage("annotations appended")
+
+    def saveAllAnnotationsToFile(self):
+        file_dialog = QFileDialog()
+        file_dialog.setDefaultSuffix('mat')
+        video_name = self.path_to_video.split('.')[0].split('Videos/')[1]
+        saved_file_name = file_dialog.getSaveFileName(self, 'Save File', '{}.mat'.format('Saved_Results/' + video_name))
+
+        if saved_file_name[0]:
+            saved_file_name = saved_file_name[0]
+            new_mat = {}
+            new_mat['k'] = [self.k]
+            new_mat['pts_neg'] = [self.pts_neg]
+            new_mat['pts_nuc'] = [self.pts_nuc]
+            new_mat['pts_pos'] = [self.pts_pos]
+            new_mat['pts_pos_o'] = [self.pts_pos_o]
+            scipy.io.savemat(saved_file_name, new_mat)
+            self.statusBar().showMessage("{} saved!".format(saved_file_name))
+
+    def cleanUpCurrentAnnotation(self):
+        self.cur_annotation = np.empty((0,2), int)
+
+    def drawpoints(self, points, color):
+        painter = QPainter(self.frame_qpixmap)
+        painter.setBrush(color)
+        for point in points:
+            center = QPoint(point[0] * self.resize_ratio, point[1] * self.resize_ratio)
+            painter.drawEllipse(center, 3, 3)
+        self.update()
+
+    def drawCurrentAnnotation(self):
+        if self.cur_annotation_type in self.types_of_annotations:
+            index = self.types_of_annotations.index(self.cur_annotation_type)
+            colors = [Qt.blue, Qt.red, Qt.green, Qt.yellow]
+            if self.cur_annotation.size > 0:
+                self.drawpoints(self.cur_annotation, colors[index])
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.drawPixmap(self.rect(), self.frame_qpixmap)
+
+    def mouseMoveEvent(self, e):
+        self.x = int(e.x() / self.resize_ratio)
+        self.y = int(e.y() / self.resize_ratio)
+
+    def keyPressEvent(self, e):
+        key = e.key()
+        if key == Qt.Key_D or key == Qt.Key_Right:
+            if self.frame_num < self.max_frame_num:
+                self.frame_num += 1
+                self.cleanUpCurrentAnnotation()
+                self.setFrame(self.frame_num)
+        elif key == Qt.Key_A or key == Qt.Key_Left:
+            if self.frame_num > 0:
+                self.frame_num -= 1
+                self.cleanUpCurrentAnnotation()
+                self.setFrame(self.frame_num)
+        # reset annotation mode to 0
+        elif key == Qt.Key_C:
+            self.mode = 0
+            self.cleanUpCurrentAnnotation()
+            self.cur_annotation_type = ""
+            self.setFrame(self.frame_num)
+            self.statusBar().showMessage("Cancel annotation")
+        # save cur_annotation according to self.mode
+        elif key == Qt.Key_Return:
+            self.saveCurrentAnnotation()
+
+    def change_frame_number(self):
+        user_frame_num, ok = QInputDialog.getInt(self, "Change Frame Number", "Please enter a number from 0 to {}".format(self.max_frame_num))
+        if ok:
+            if user_frame_num <= self.max_frame_num and user_frame_num >= 0:
+                self.frame_num = user_frame_num
+                self.setFrame(self.frame_num)
+                self.cleanUpCurrentAnnotation
+            else:
+                self.statusBar().showMessage("The input is not valid, please try again")
+
+    def mousePressEvent(self, e):
+        text = "x: {0}, y: {1}".format(self.x, self.y)
+        self.addToCurrentAnnotation(self.x, self.y)
+        self.statusBar().showMessage("{} selected".format(text))
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    fb = FrameBox()
+    fb.show()
+    sys.exit(app.exec_())
