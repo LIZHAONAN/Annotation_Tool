@@ -6,8 +6,8 @@ Created at: 4/13/2019
 import numpy as np
 import os
 import sys
-from PyQt5.QtCore import Qt, QPoint
-from PyQt5.QtWidgets import QWidget, QApplication, QLabel, QMainWindow, QAction, QInputDialog, QFileDialog
+from PyQt5.QtCore import Qt, QPoint, QCoreApplication
+from PyQt5.QtWidgets import QProgressDialog, QApplication, QLabel, QMainWindow, QAction, QInputDialog, QFileDialog
 from PyQt5.QtGui import QPainter, QPixmap, QImage
 import cv2
 import scipy.io
@@ -21,16 +21,16 @@ class FrameBox(QMainWindow):
         self.initParameters()
         self.initUI()
         self.initMenu()
-        self.initAnnotation()
         self.init_frames()
+        self.initAnnotation()
         self.setFrame(self.frame_num)
 
     def initParameters(self):
-        self.types_of_annotations = ["pts_pos","pts_neg", "pts_pos_o", "pts_nuc"]
+        self.types_of_annotations = ["pts_pos", "pts_neg", "pts_pos_o", "pts_nuc"]
         self.x = 0
         self.y = 0
         self.mode = 0  # 1 is update, 2 is append, 0 doesn't change the existing annotations
-        self.cur_annotation = np.empty((0,2), int)
+        self.cur_annotation = np.empty((0, 2), int)
         self.cur_annotation_type = ""
         self.path_to_video = 'Videos/d400um.avi'
         self.path_to_annot = '18000_4c.mat'
@@ -81,20 +81,32 @@ class FrameBox(QMainWindow):
             os.mkdir(path_to_frame_folder)
             # extract frames from video and store them in the folder we just created
             success, frame = self.video_reader.read()
-
             frame_counter = 0
+
+            max_frame = self.video_reader.get(cv2.CAP_PROP_FRAME_COUNT)
+            self.progress = QProgressDialog("Generating frame files...", "Cancel", 0, max_frame)
+
             while success:
+                QCoreApplication.processEvents()
+                if self.progress.wasCanceled():
+                    os.remove(path_to_frame_folder)
+                    break
+
                 image_file_name = path_to_frame_folder + '/%05d.jpg' % frame_counter
-                self.statusBar.showMessage(image_file_name)
+                self.statusBar().showMessage(image_file_name)
                 cv2.imwrite(image_file_name, frame)
                 success, frame = self.video_reader.read()
                 frame_counter += 1
-            self.max_frame_num = frame_counter - 1
-            self.statusBar.showMessage("Frames stored at {}".format(path_to_frame_folder))
 
-        # get total number of frames
-        file_names = [int(x.split('.jpg')[0]) for x in os.listdir(path_to_frame_folder) if '.jpg' in x]
-        self.max_frame_num = max(file_names)
+                self.progress.setValue(frame_counter)
+
+            self.progress.close()
+            self.max_frame_num = frame_counter - 1
+            self.statusBar().showMessage("Frames stored at {}".format(path_to_frame_folder))
+        else:
+            # get total number of frames
+            file_names = [int(x.split('.jpg')[0]) for x in os.listdir(path_to_frame_folder) if '.jpg' in x]
+            self.max_frame_num = max(file_names)
 
     # read k, points of neg, nuc, pos, and pos_o
     def initAnnotation(self):
@@ -160,12 +172,13 @@ class FrameBox(QMainWindow):
         assert(frame_num >= 0)
         self.statusBar().showMessage("set frame number to {}".format(frame_num))
 
-        self.frame_num = frame_num # update current frame number
+        self.frame_num = frame_num  # update current frame number
 
         frame_file_name = 'Frames/' + self.path_to_video.split('Videos/')[1] + '/%05d' % frame_num
         q_image = QImage(frame_file_name).scaledToHeight(self.frame_height).scaledToWidth(self.frame_width)
 
         self.frame_qpixmap = QPixmap.fromImage(q_image)
+        self.update()
 
         pts_pos = self.pts_pos[frame_num][0]
         pts_neg = self.pts_neg[frame_num][0]
@@ -181,8 +194,7 @@ class FrameBox(QMainWindow):
         if pts_nuc.size > 0:
             self.drawpoints(pts_nuc, Qt.yellow)
 
-        if not self.mode == 0:
-            self.drawCurrentAnnotation()
+        self.drawCurrentAnnotation()
 
     def addToCurrentAnnotation(self, x, y):
         if not self.mode == 0:
@@ -197,41 +209,61 @@ class FrameBox(QMainWindow):
             elif self.cur_annotation_type == 'pts_pos':
                 self.pts_pos[self.frame_num][0] = self.cur_annotation
             elif self.cur_annotation_type == 'pts_pos_o':
-                self.pts_pos_o[self.frame_num][0] == self.cur_annotation
+                self.pts_pos_o[self.frame_num][0] = self.cur_annotation
             elif self.cur_annotation_type == 'pts_nuc':
-                self.pts_nuc[self.frame_num][0] == self.cur_annotation
+                self.pts_nuc[self.frame_num][0] = self.cur_annotation
+            self.setFrame(self.frame_num)
             self.statusBar().showMessage("annotations updated")
         # append mode
         elif self.mode == 2:
+            annotation_selected = np.empty((0, 2), int)
             if self.cur_annotation_type == 'pts_neg':
-                self.pts_neg[self.frame_num][0] = np.vstack((self.pts_neg[self.frame_num][0], self.cur_annotation))
+                annotation_selected = self.pts_neg[self.frame_num][0]
             elif self.cur_annotation_type == 'pts_pos':
-                self.pts_pos[self.frame_num][0] = np.vstack((self.pts_pos[self.frame_num][0], self.cur_annotation))
+                annotation_selected = self.pts_pos[self.frame_num][0]
             elif self.cur_annotation_type == 'pts_pos_o':
-                self.pts_pos_o[self.frame_num][0] = np.vstack((self.pts_pos_o[self.frame_num][0], self.cur_annotation))
+                annotation_selected = self.pts_pos_o[self.frame_num][0]
             elif self.cur_annotation_type == 'pts_nuc':
-                self.pts_nuc[self.frame_num][0] = np.vstack((self.pts_nuc[self.frame_num][0], self.cur_annotation))
+                annotation_selected = self.pts_nuc[self.frame_num][0]
+
+            # initialize with empty np array if annotation needed to be changed is an empty python list
+            # (which cannot be stacked)
+            if len(annotation_selected) == 0:
+                annotation_selected = np.empty((0, 2), int)
+
+            annotation_selected = np.vstack((annotation_selected, self.cur_annotation))
+
+            if self.cur_annotation_type == 'pts_neg':
+                self.pts_neg[self.frame_num][0] = annotation_selected
+            elif self.cur_annotation_type == 'pts_pos':
+                self.pts_pos[self.frame_num][0] = annotation_selected
+            elif self.cur_annotation_type == 'pts_pos_o':
+                self.pts_pos_o[self.frame_num][0] = annotation_selected
+            elif self.cur_annotation_type == 'pts_nuc':
+                self.pts_nuc[self.frame_num][0] = annotation_selected
+
+            self.setFrame(self.frame_num)
             self.statusBar().showMessage("annotations appended")
 
     def saveAllAnnotationsToFile(self):
         file_dialog = QFileDialog()
         file_dialog.setDefaultSuffix('mat')
         video_name = self.path_to_video.split('.')[0].split('Videos/')[1]
-        saved_file_name = file_dialog.getSaveFileName(self, 'Save File', '{}.mat'.format('Saved_Results/' + video_name))
+        saved_file_name = file_dialog.getSaveFileName(self, 'Save File', '{}.mat'.format('Saved_Results/' + video_name))[0]
+        self.saveToFile(saved_file_name)
 
-        if saved_file_name[0]:
-            saved_file_name = saved_file_name[0]
-            new_mat = {}
-            new_mat['k'] = [self.k]
-            new_mat['pts_neg'] = [self.pts_neg]
-            new_mat['pts_nuc'] = [self.pts_nuc]
-            new_mat['pts_pos'] = [self.pts_pos]
-            new_mat['pts_pos_o'] = [self.pts_pos_o]
-            scipy.io.savemat(saved_file_name, new_mat)
-            self.statusBar().showMessage("{} saved!".format(saved_file_name))
+    def saveToFile(self, path_to_file):
+        if path_to_file:
+            new_mat = {'k': self.k,
+                       'pts_neg': self.pts_neg,
+                       'pts_nuc': self.pts_nuc,
+                       'pts_pos': self.pts_pos,
+                       'pts_pos_o': self.pts_pos_o}
+            scipy.io.savemat(path_to_file, new_mat)
+            self.statusBar().showMessage("{} saved!".format(path_to_file))
 
     def cleanUpCurrentAnnotation(self):
-        self.cur_annotation = np.empty((0,2), int)
+        self.cur_annotation = np.empty((0, 2), int)
 
     def drawpoints(self, points, color):
         painter = QPainter(self.frame_qpixmap)
@@ -276,7 +308,7 @@ class FrameBox(QMainWindow):
             self.setFrame(self.frame_num)
             self.statusBar().showMessage("Cancel annotation")
         # save cur_annotation according to self.mode
-        elif key == Qt.Key_Return:
+        elif key == Qt.Key_Return or key == Qt.Key_Space:
             self.saveCurrentAnnotation()
 
     def change_frame_number(self):
