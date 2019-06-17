@@ -52,6 +52,8 @@ class FrameBox(QMainWindow):
 
         # resize if the input video is too big
         if frame_width > 500 or frame_height > 500:
+            print(frame_width)
+            print(frame_height)
             self.resize_ratio = 0.8
             self.frame_width = int(frame_width * self.resize_ratio)
             self.frame_height = int(frame_height * self.resize_ratio)
@@ -168,6 +170,10 @@ class FrameBox(QMainWindow):
         self.cleanUpCurrentAnnotation()
         self.cur_annotation_type = cur
 
+    # search for
+    # def deleteAnnotations(self, x, y):
+
+
     def setFrame(self, frame_num):
         assert(frame_num >= 0)
         self.statusBar().showMessage("set frame number to {}".format(frame_num))
@@ -269,7 +275,8 @@ class FrameBox(QMainWindow):
         painter = QPainter(self.frame_qpixmap)
         painter.setBrush(color)
         for point in points:
-            center = QPoint(point[0] * self.resize_ratio, point[1] * self.resize_ratio)
+            # update: relative position
+            center = QPoint(point[0] * self.frame_width, point[1] * self.frame_height)
             painter.drawEllipse(center, 3, 3)
         self.update()
 
@@ -285,8 +292,8 @@ class FrameBox(QMainWindow):
         painter.drawPixmap(self.rect(), self.frame_qpixmap)
 
     def mouseMoveEvent(self, e):
-        self.x = int(e.x() / self.resize_ratio)
-        self.y = int(e.y() / self.resize_ratio)
+        self.x = e.x() / self.frame_width
+        self.y = e.y() / self.frame_height
 
     def keyPressEvent(self, e):
         key = e.key()
