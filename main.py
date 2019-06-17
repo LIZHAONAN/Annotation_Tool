@@ -29,8 +29,8 @@ class FrameBox(QMainWindow):
         self.types_of_annotations = ["pts_pos", "pts_neg", "pts_pos_o", "pts_nuc"]
         self.x = 0
         self.y = 0
-        self.mode = 0  # 1 is update, 2 is append, 0 doesn't change the existing annotations
-        self.cur_annotation = np.empty((0, 2), int)
+        self.mode = 0  # 1 is update, 2 is append, 3 is delete, 0 doesn't change the existing annotations
+        self.cur_annotation = np.empty((0, 2), float)
         self.cur_annotation_type = ""
         self.path_to_video = 'Videos/d400um.avi'
         self.path_to_annot = '18000_4c.mat'
@@ -170,9 +170,40 @@ class FrameBox(QMainWindow):
         self.cleanUpCurrentAnnotation()
         self.cur_annotation_type = cur
 
-    # search for
-    # def deleteAnnotations(self, x, y):
+    # New Feature:
+    # search for point most close to the given position, if the distance is within radius, we delete this position po
+    def deleteAnnotations(self, x, y, radius=0.02):
+        cur_pts_neg = self.pts_neg[self.frame_num][0]
+        cur_pts_pos = self.pts_pos[self.frame_num][0]
+        cur_pts_nuc = self.pts_nuc[self.frame_num][0]
+        cur_pts_pos_o = self.pts_pos_o[self.frame_num][0]
+        if len(cur_pts_neg) > 0:
+            dis = np.sqrt(np.sum(np.square(cur_pts_neg - [x, y]), axis=1))
+            if np.min(dis) < radius:
+                cur_pts_neg = np.delete(cur_pts_neg, np.argmin(dis), 0)
+                self.pts_neg[self.frame_num][0] = cur_pts_neg
+                self.setFrame(self.frame_num)
 
+        if len(cur_pts_pos) > 0:
+            dis = np.sqrt(np.sum(np.square(cur_pts_pos - [x, y]), axis=1))
+            if np.min(dis) < radius:
+                cur_pts_pos = np.delete(cur_pts_pos, np.argmin(dis), 0)
+                self.pts_pos[self.frame_num][0] = cur_pts_pos
+                self.setFrame(self.frame_num)
+
+        if len(cur_pts_pos_o) > 0:
+            dis = np.sqrt(np.sum(np.square(cur_pts_pos_o - [x, y]), axis=1))
+            if np.min(dis) < radius:
+                cur_pts_pos_o = np.delete(cur_pts_pos_o, np.argmin(dis), 0)
+                self.pts_pos_o[self.frame_num][0] = cur_pts_pos_o
+                self.setFrame(self.frame_num)
+
+        if len(cur_pts_nuc) > 0:
+            dis = np.sqrt(np.sum(np.square(cur_pts_nuc - [x, y]), axis=1))
+            if np.min(dis) < radius:
+                cur_pts_nuc = np.delete(cur_pts_nuc, np.argmin(dis), 0)
+                self.pts_nuc[self.frame_num][0] = cur_pts_nuc
+                self.setFrame(self.frame_num)
 
     def setFrame(self, frame_num):
         assert(frame_num >= 0)
@@ -222,7 +253,7 @@ class FrameBox(QMainWindow):
             self.statusBar().showMessage("annotations updated")
         # append mode
         elif self.mode == 2:
-            annotation_selected = np.empty((0, 2), int)
+            annotation_selected = np.empty((0, 2), float)
             if self.cur_annotation_type == 'pts_neg':
                 annotation_selected = self.pts_neg[self.frame_num][0]
             elif self.cur_annotation_type == 'pts_pos':
@@ -235,7 +266,7 @@ class FrameBox(QMainWindow):
             # initialize with empty np array if annotation needed to be changed is an empty python list
             # (which cannot be stacked)
             if len(annotation_selected) == 0:
-                annotation_selected = np.empty((0, 2), int)
+                annotation_selected = np.empty((0, 2), float)
 
             annotation_selected = np.vstack((annotation_selected, self.cur_annotation))
 
@@ -269,7 +300,7 @@ class FrameBox(QMainWindow):
             self.statusBar().showMessage("{} saved!".format(path_to_file))
 
     def cleanUpCurrentAnnotation(self):
-        self.cur_annotation = np.empty((0, 2), int)
+        self.cur_annotation = np.empty((0, 2), float)
 
     def drawpoints(self, points, color):
         painter = QPainter(self.frame_qpixmap)
@@ -298,15 +329,21 @@ class FrameBox(QMainWindow):
     def keyPressEvent(self, e):
         key = e.key()
         if key == Qt.Key_D or key == Qt.Key_Right:
+            self.mode = 0
             if self.frame_num < self.max_frame_num:
                 self.frame_num += 1
                 self.cleanUpCurrentAnnotation()
                 self.setFrame(self.frame_num)
         elif key == Qt.Key_A or key == Qt.Key_Left:
+            self.mode = 0
             if self.frame_num > 0:
                 self.frame_num -= 1
                 self.cleanUpCurrentAnnotation()
                 self.setFrame(self.frame_num)
+        # new feature:
+        elif key == Qt.Key_Tab:
+            self.mode = 3
+
         # reset annotation mode to 0
         elif key == Qt.Key_C:
             self.mode = 0
@@ -329,9 +366,12 @@ class FrameBox(QMainWindow):
                 self.statusBar().showMessage("The input is not valid, please try again")
 
     def mousePressEvent(self, e):
-        text = "x: {0}, y: {1}".format(self.x, self.y)
-        self.addToCurrentAnnotation(self.x, self.y)
-        self.statusBar().showMessage("{} selected".format(text))
+        if self.mode == 1 or self.mode == 2:
+            text = "x: {0}, y: {1}".format(self.x, self.y)
+            self.addToCurrentAnnotation(self.x, self.y)
+            self.statusBar().showMessage("{} selected".format(text))
+        elif self.mode == 3:
+            self.deleteAnnotations(self.x, self.y)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
