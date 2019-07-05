@@ -112,11 +112,14 @@ class FrameBox(QMainWindow):
         save_annotation.addAction(save_annotation_action)
 
     def updateAnnotations(self, index):
-        cur = self.types_of_annotations[index]
-        self.statusBar().showMessage("Update mode selected: {}".format(cur))
-        self.mode = 1
-        self.cleanUpCurrentAnnotation()
-        self.cur_annotation_type = cur
+        if self.frame_num < 11000:
+            cur = self.types_of_annotations[index]
+            self.statusBar().showMessage("Update mode selected: {}".format(cur))
+            self.mode = 1
+            self.cleanUpCurrentAnnotation()
+            self.cur_annotation_type = cur
+        else:
+            self.statusBar().showMessage("Update mode selected: {}".format("Update mode is disabled when frame number > 11000!"))
 
     def appendAnnotations(self, index):
         cur = self.types_of_annotations[index]
@@ -127,7 +130,7 @@ class FrameBox(QMainWindow):
 
     # New Feature:
     # search for point most close to the given position, if the distance is within radius, we delete this point
-    def deleteAnnotations(self, x, y, radius=0.04):
+    def deleteAnnotations(self, x, y, radius=0.02):
         cur_pts_neg = self.pts_neg[self.frame_num][0]
         cur_pts_pos = self.pts_pos[self.frame_num][0]
         cur_pts_nuc = self.pts_nuc[self.frame_num][0]
@@ -174,11 +177,13 @@ class FrameBox(QMainWindow):
         self.frame_height, self.frame_width, _ = image_data.shape
 
         # adjust window size
+        # ratio = min(1000 / self.frame_width, 1000 / self.frame_height)
         ratio = min(600 / self.frame_width, 600 / self.frame_height)
         self.frame_width = int(self.frame_width * ratio)
         self.frame_height = int(self.frame_height * ratio)
 
         # reset the size of the window
+        # self.setGeometry(1300, -1000, self.frame_width, self.frame_height)
         self.setGeometry(0, 0, self.frame_width, self.frame_height)
         self.frame_display.resize(self.frame_width, self.frame_height)
 
@@ -260,8 +265,7 @@ class FrameBox(QMainWindow):
     def saveAllAnnotationsToFile(self):
         file_dialog = QFileDialog()
         file_dialog.setDefaultSuffix('mat')
-        video_name = self.path_to_video.split('.')[0].split('Videos/')[1]
-        saved_file_name = file_dialog.getSaveFileName(self, 'Save File', '{}.mat'.format('Saved_Results/' + video_name))[0]
+        saved_file_name = file_dialog.getSaveFileName(self, 'Save File', '{}.mat'.format('Saved_Results/'))[0]
         self.saveToFile(saved_file_name)
 
     def saveToFile(self, path_to_file):
