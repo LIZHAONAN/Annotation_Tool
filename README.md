@@ -69,6 +69,9 @@ If you don't want to save current changes, just begin selecting the next frame
 ### Save annotations to file
 <kbd>⌘ Command</kbd> + <kbd> S </kbd>
 
+## Convert .mat file to .csv file
+Change the file name and run mat_to_csv.py
+
 ## Author
 Zhaonan Li, [LIZHAONAN](https://github.com/LIZHAONAN)
 
