@@ -69,6 +69,8 @@ If you don't want to save current changes, just begin selecting the next frame
 ### Save annotations to file
 <kbd>⌘ Command</kbd> + <kbd> S </kbd>
 
+Note that the result will be saved in .mat format. To convert to DataFrame stored in .csv format, see the description below
+
 ## Convert .mat file to .csv file
 Change the ```path_to_mat_file``` and ```path_to_csv_file``` in mat_to_csv.py and run
 
