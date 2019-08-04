@@ -40,7 +40,6 @@ class FrameBox(QMainWindow):
     # initialize parameters including frame_width, frame_height, total_frames
     def initUI(self):
         assert(os.path.isfile(self.path_to_video))
-
         # get video properties
         frame_width = int(self.video_reader.get(cv2.CAP_PROP_FRAME_WIDTH))
         frame_height = int(self.video_reader.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -172,7 +171,7 @@ class FrameBox(QMainWindow):
 
     # New Feature:
     # search for point most close to the given position, if the distance is within radius, we delete this position po
-    def deleteAnnotations(self, x, y, radius=0.02):
+    def deleteAnnotations(self, x, y, radius=0.04):
         cur_pts_neg = self.pts_neg[self.frame_num][0]
         cur_pts_pos = self.pts_pos[self.frame_num][0]
         cur_pts_nuc = self.pts_nuc[self.frame_num][0]
@@ -329,13 +328,15 @@ class FrameBox(QMainWindow):
     def keyPressEvent(self, e):
         key = e.key()
         if key == Qt.Key_D or key == Qt.Key_Right:
-            self.mode = 0
+            if self.mode == 3:
+                self.mode = 0
             if self.frame_num < self.max_frame_num:
                 self.frame_num += 1
                 self.cleanUpCurrentAnnotation()
                 self.setFrame(self.frame_num)
         elif key == Qt.Key_A or key == Qt.Key_Left:
-            self.mode = 0
+            if self.mode == 3:
+                self.mode = 0
             if self.frame_num > 0:
                 self.frame_num -= 1
                 self.cleanUpCurrentAnnotation()
