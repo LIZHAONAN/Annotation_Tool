@@ -26,7 +26,7 @@ To label videos, run ```python3 label_videos.py```
 
 ## Labeling
 
-- Repeat util finish labeling:
+- Repeat until finish labeling:
 
   - Select frame
   
