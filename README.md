@@ -70,4 +70,5 @@ If you don't want to save current changes, just begin selecting the next frame
 <kbd>⌘ Command</kbd> + <kbd> S </kbd>
 
 ## Author
-Zhaonan Li, zli@brandeis.edu
+Zhaonan Li, [LIZHAONAN](https://github.com/LIZHAONAN)
+
