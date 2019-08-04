@@ -26,6 +26,9 @@ To label videos, run ```python3 label_videos.py```
 
 ## Features
 ### Frame number selection
-<kbd>CTRL</kbd>+<kbd>F</kbd> Then input frame number
+<kbd> CTRL </kbd>+<kbd> F </kbd> Then input frame number
 
-Or <kbd>W</kbd>/<kbd></kbd>
+<kbd> A </kbd> Or <kbd> &leftarrow; </kbd> to navigate to the previous frame
+
+<kbd> D </kbd> Or <kbd> &rightarrow; </kbd> to navigate to the next frame
+
