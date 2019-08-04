@@ -70,7 +70,7 @@ If you don't want to save current changes, just begin selecting the next frame
 <kbd>⌘ Command</kbd> + <kbd> S </kbd>
 
 ## Convert .mat file to .csv file
-Change the file name and run mat_to_csv.py
+Change the ```path_to_mat_file``` and ```path_to_csv_file``` in mat_to_csv.py and run
 
 ## Author
 Zhaonan Li, [LIZHAONAN](https://github.com/LIZHAONAN)
