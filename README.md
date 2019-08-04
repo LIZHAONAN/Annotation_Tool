@@ -2,7 +2,7 @@
 Annotation tool for labeling topological defects in images or videos
 
 ## Getting started
-Prerequisites:
+Prerequisites:\n
 install pyqt5
 ```
 pip3 install PyQt5
