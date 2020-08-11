@@ -66,6 +66,7 @@ class FrameBox(QMainWindow):
         self.x = 0
         self.y = 0
         self.modify = False
+        self.scale = 1.0
 
     # init menu bar
     def initMenu(self):
@@ -107,13 +108,6 @@ class FrameBox(QMainWindow):
         self.cleanUpCurrentAnnotation()
         self.cur_annotation_type = cur
 
-    # def appendAnnotations(self, index):
-    #     cur = self.types_of_annotations[index]
-    #     self.statusBar().showMessage("Append mode selected: {}".format(cur))
-    #     self.mode = 2
-    #     self.cleanUpCurrentAnnotation()
-    #     self.cur_annotation_type = cur
-
     # New Feature:
     # search for point most close to the given position, if the distance is within radius, we delete this point
     def deleteAnnotations(self, index):
@@ -131,7 +125,6 @@ class FrameBox(QMainWindow):
         # get width and height of the current image
         # frame_file_name = self.path_to_images + '/%06d.jpg' % (frame_num + 1)
         frame_file_name = self.df.loc[index].path
-        print(frame_file_name)
 
         image = cv2.imread(frame_file_name)
 
@@ -141,7 +134,7 @@ class FrameBox(QMainWindow):
         x = int(x * w)
         y = int(y * h)
 
-        window_size = int(64 * scale)
+        window_size = 4 * (int(64 * scale) // 4)
 
         box = [max(0, x - math.floor(window_size / 2)), max(0, y - math.floor(window_size / 2)),
                min(w, x + math.ceil(window_size / 2)), min(h, y + math.ceil(window_size / 2))]
@@ -149,7 +142,6 @@ class FrameBox(QMainWindow):
         window = np.zeros((window_size, window_size, c), np.uint8)
         x_start = math.floor(window_size / 2) - x + box[0]
         y_start = math.floor(window_size / 2) - y + box[1]
-
         x_width = box[2] - box[0]
         y_width = box[3] - box[1]
         window[y_start:y_start + y_width, x_start:x_start + x_width, :] = image[box[1]:box[3], box[0]:box[2], :]
@@ -185,6 +177,7 @@ class FrameBox(QMainWindow):
         theta = theta.astype(float)
 
         self.drawAngle(cls, theta)
+        del q_image
 
     def addToCurrentAnnotation(self, x, y):
         if not self.mode == 0:
@@ -213,17 +206,6 @@ class FrameBox(QMainWindow):
             self.setFrame(self.index)
             self.statusBar().showMessage("annotations updated")
 
-        # append mode
-        # elif self.mode == 2:
-        #     new_df = pd.DataFrame(self.cur_annotation, columns=['x', 'y'])
-        #     new_df['path'] = self.paths[self.frame_num - 1]
-        #     new_df['class'] = c
-        #
-        #     self.df = self.df.append(new_df, ignore_index=True)
-        #
-        #     self.setFrame(self.frame_num)
-        #     self.statusBar().showMessage("annotations appended")
-
     def saveAllAnnotationsToFile(self, file_name=None):
         if not file_name:
             file_dialog = QFileDialog()
@@ -233,7 +215,7 @@ class FrameBox(QMainWindow):
 
     def saveToFile(self, path_to_file):
         if path_to_file:
-            self.df = self.df.sort_values(by=['path'], ignore_index=True)
+            # self.df = self.df.sort_values(by=['path'], ignore_index=True)
             self.df.to_csv(path_to_file, sep=',', index=False)
             self.statusBar().showMessage("{} saved!".format(path_to_file))
 
@@ -293,48 +275,6 @@ class FrameBox(QMainWindow):
             if self.cur_annotation.size > 0:
                 self.drawpoints(self.cur_annotation, colors[index])
 
-    # def drawPrevAnnotation(self):
-    #     if self.frame_num <= 1:
-    #         return
-    #     cur_path = self.paths[self.frame_num - 1]
-    #     prev_path = self.paths[self.frame_num - 2]
-    #
-    #     cur_df = self.df[self.df['path'] == cur_path]
-    #     prev_df = self.df[self.df['path'] == prev_path]
-    #
-    #     cur_pos = cur_df[cur_df['class'] == 0][['x', 'y']].values
-    #     cur_neg = cur_df[cur_df['class'] == 1][['x', 'y']].values
-    #
-    #     prev_pos = prev_df[prev_df['class'] == 0][['x', 'y']].values
-    #     prev_neg = prev_df[prev_df['class'] == 1][['x', 'y']].values
-    #
-    #     # assign everu prev annotation with one corresponding label in current frame (if applicable)
-    #     pos_dis = np.array([[i, j, np.sqrt((r1[0] - r2[0]) ** 2 + (r1[1] - r2[1]) ** 2)] for i, r1 in enumerate(prev_pos)
-    #                         for j, r2 in enumerate(cur_pos)])
-    #     pos_dis = pos_dis[pos_dis[:, 2] < 0.02, :]
-    #
-    #     # assign everu prev annotation with one corresponding label in current  frame( if applicable)
-    #     neg_dis = np.array([[i, j, np.sqrt((r1[0] - r2[0]) ** 2 + (r1[1] - r2[1]) ** 2)] for i, r1 in enumerate(prev_neg)
-    #                         for j, r2 in enumerate(cur_neg)])
-    #     neg_dis = neg_dis[neg_dis[:, 2] < 0.02, :]
-    #
-    #     pos_map = np.empty([0, 2], dtype=int)
-    #     for idx in np.argsort(pos_dis[:, 2]):
-    #         i, j = int(pos_dis[idx, 0]), int(pos_dis[idx, 1])
-    #         if (i not in pos_map[:, 0]) and (j not in pos_map[:, 1]):
-    #             pos_map = np.vstack((pos_map, np.array([i, j])))
-    #
-    #     neg_map = np.empty([0, 2], dtype=int)
-    #     for idx in np.argsort(neg_dis[:, 2]):
-    #         i, j = int(neg_dis[idx, 0]), int(neg_dis[idx, 1])
-    #         if (i not in neg_map[:, 0]) and (j not in neg_map[:, 1]):
-    #             neg_map = np.vstack((neg_map, np.array([i, j])))
-    #
-    #     self.drawlines(prev_pos[pos_map[:, 0], :], cur_pos[pos_map[:, 1], :], QColor(0, 0, 255, 255))
-    #     self.drawlines(prev_neg[neg_map[:, 0], :], cur_neg[neg_map[:, 1], :], QColor(255, 0, 0, 255))
-        # self.drawpoints(prev_pos[pos_map[:, 0], :], QColor(0, 0, 255, 255), radius=2)
-        # self.drawpoints(prev_neg[neg_map[:, 0], :], QColor(255, 0, 0, 255), radius=2)
-
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -348,39 +288,73 @@ class FrameBox(QMainWindow):
         self.y = e.y() / (self.frame_height / 1.1)
 
         if self.modify:
-            self.theta = (self.theta + 2 * (prev_y - self.y)) % (2 * np.pi)
+            v1 = np.array([prev_x - .5, prev_y - .5])
+            v2 = np.array([self.x - .5, self.y - .5])
+            v1 = v1 / (np.linalg.norm(v1) + 1e-16)
+            v2 = v2 / (np.linalg.norm(v2) + 1e-16)
+
+            d_theta = np.arccos(np.dot(v1, v2))
+
+            if ((v1[0]-0.5) * (v2[1]-0.5) - (v1[1]-0.5) * (v2[0]-0.5)) < -1e-5:
+                d_theta *= -1.0
+
+            self.theta = (self.theta - d_theta) % (2 * np.pi)
             self.df.at[self.index, 'theta'] = self.theta
 
-            self.setFrame(self.index)
+            self.setFrame(self.index, self.scale)
             self.update()
+
+    # modify position of a given defect (x, y) by off_x and off_y
+    def modifyPosition(self, index, off_x=.0, off_y=.0):
+        x, y = self.df.loc[index][['x', 'y']].values
+        x += off_x
+        y += off_y
+        self.df.at[index, 'x'] = x
+        self.df.at[index, 'y'] = y
 
     def keyPressEvent(self, e):
         key = e.key()
-        if key == Qt.Key_D or key == Qt.Key_Right:
+        if key == Qt.Key_Right:
+            self.scale = 1.0
             if self.mode == 3:
                 self.mode = 0
             if self.index < self.hi_idx - 1:
                 self.index += 1
                 self.cleanUpCurrentAnnotation()
-                self.setFrame(self.index)
-        elif key == Qt.Key_A or key == Qt.Key_Left:
+                self.setFrame(self.index, self.scale)
+
+        elif key == Qt.Key_Left:
+            self.scale = 1.0
             if self.mode == 3:
                 self.mode = 0
             if self.frame_num > self.lo_idx:
                 self.index -= 1
                 self.cleanUpCurrentAnnotation()
-                self.setFrame(self.index)
-        # new feature:
-        elif key == Qt.Key_Tab:
-            self.mode = 3
+                self.setFrame(self.index, self.scale)
 
-        # reset annotation mode to 0
-        elif key == Qt.Key_C:
-            self.mode = 0
-            self.cleanUpCurrentAnnotation()
-            self.cur_annotation_type = ""
-            self.setFrame(self.frame_num)
-            self.statusBar().showMessage("Cancel annotation")
+        elif key == Qt.Key_W:
+            self.modifyPosition(self.index, off_y=-0.002)
+            self.setFrame(self.index, self.scale)
+        elif key == Qt.Key_S:
+            self.modifyPosition(self.index, off_y=0.002)
+            self.setFrame(self.index, self.scale)
+        elif key == Qt.Key_A:
+            self.modifyPosition(self.index, off_x=-0.002)
+            self.setFrame(self.index, self.scale)
+        elif key == Qt.Key_D:
+            self.modifyPosition(self.index, off_x=0.002)
+            self.setFrame(self.index, self.scale)
+        # # new feature:
+        # elif key == Qt.Key_Tab:
+        #     self.mode = 3
+        #
+        # # reset annotation mode to 0
+        # elif key == Qt.Key_C:
+        #     self.mode = 0
+        #     self.cleanUpCurrentAnnotation()
+        #     self.cur_annotation_type = ""
+        #     self.setFrame(self.frame_num)
+        #     self.statusBar().showMessage("Cancel annotation")
         # save cur_annotation according to self.mode
         elif key == Qt.Key_Return or key == Qt.Key_Space:
             self.saveCurrentAnnotation()
@@ -398,15 +372,18 @@ class FrameBox(QMainWindow):
 
     def mousePressEvent(self, e):
         self.modify = True
-        # if self.mode == 1 or self.mode == 2:
-        #     text = "x: {0}, y: {1}".format(self.x, self.y)
-        #     self.addToCurrentAnnotation(self.x, self.y)
-        #     self.statusBar().showMessage("{} selected".format(text))
-        # elif self.mode == 3:
-        #     self.deleteAnnotations(self.index)
 
     def mouseReleaseEvent(self, e):
         self.modify = False
+
+    def wheelEvent(self, e):
+        delta = e.angleDelta().y()
+        print('delta = {}'.format(delta))
+        new_scale = self.scale - 0.05 * (delta / 60)
+        new_scale = 0.05 * (new_scale // 0.05)
+        self.scale = np.clip(new_scale, 0.5, 5.0).astype(float)
+        print('scale = {}'.format(self.scale))
+        self.setFrame(self.index, self.scale)
 
 
 def run():
