@@ -52,6 +52,7 @@ class FrameBox(QMainWindow):
         file_name = file_dialog.getOpenFileName(self, 'Select Annotation File')
         if file_name[0]:
             self.df = pd.read_csv(file_name[0])
+            self.df['deleted'] = 0
             # self.paths = self.df['path'].unique()
             self.hi_idx = len(self.df) - 1
             self.lo_idx = 0
@@ -176,7 +177,9 @@ class FrameBox(QMainWindow):
         cls = cls.astype(int)
         theta = theta.astype(float)
 
-        self.drawAngle(cls, theta)
+        if self.df.loc[index][['deleted']].values == 0:
+            self.drawAngle(cls, theta)
+
         del q_image
 
     def addToCurrentAnnotation(self, x, y):
@@ -314,7 +317,7 @@ class FrameBox(QMainWindow):
 
     def keyPressEvent(self, e):
         key = e.key()
-        if key == Qt.Key_Right:
+        if key == Qt.Key_Right or key == Qt.Key_E:
             self.scale = 1.0
             if self.mode == 3:
                 self.mode = 0
@@ -323,7 +326,7 @@ class FrameBox(QMainWindow):
                 self.cleanUpCurrentAnnotation()
                 self.setFrame(self.index, self.scale)
 
-        elif key == Qt.Key_Left:
+        elif key == Qt.Key_Left or key == Qt.Key_Q:
             self.scale = 1.0
             if self.mode == 3:
                 self.mode = 0
@@ -344,9 +347,11 @@ class FrameBox(QMainWindow):
         elif key == Qt.Key_D:
             self.modifyPosition(self.index, off_x=0.002)
             self.setFrame(self.index, self.scale)
-        # # new feature:
-        # elif key == Qt.Key_Tab:
-        #     self.mode = 3
+        # delete / undo
+        elif key == Qt.Key_Tab:
+            is_deleted = self.df.loc[self.index].deleted
+            self.df.at[self.index, 'deleted'] = 1 - is_deleted
+            self.setFrame(self.index, self.scale)
         #
         # # reset annotation mode to 0
         # elif key == Qt.Key_C:
@@ -361,11 +366,11 @@ class FrameBox(QMainWindow):
 
     def change_frame_number(self):
         user_frame_num, ok = QInputDialog.getInt(
-            self, "Change Frame Number", "Please enter a number from 0 to {}".format(self.max_frame_num))
+            self, "Change Frame Number", "Please enter a number from 0 to {}".format(len(self.df)))
         if ok:
-            if user_frame_num <= self.max_frame_num and user_frame_num > 0:
-                self.frame_num = user_frame_num
-                self.setFrame(self.frame_num)
+            if user_frame_num < len(self.df) and user_frame_num >= 0:
+                self.index = user_frame_num
+                self.setFrame(self.index)
                 self.cleanUpCurrentAnnotation()
             else:
                 self.statusBar().showMessage("The input is not valid, please try again")
@@ -378,11 +383,9 @@ class FrameBox(QMainWindow):
 
     def wheelEvent(self, e):
         delta = e.angleDelta().y()
-        print('delta = {}'.format(delta))
         new_scale = self.scale - 0.05 * (delta / 60)
         new_scale = 0.05 * (new_scale // 0.05)
         self.scale = np.clip(new_scale, 0.5, 5.0).astype(float)
-        print('scale = {}'.format(self.scale))
         self.setFrame(self.index, self.scale)
 
 
